@@ -1,9 +1,12 @@
 var express = require('express');
 var router = express.Router();
 
-/* GET home page. */
 router.get('/', function(req, res, next) {
-  res.render('index', { title: 'Express' });
+	var info = {};
+	info.name = req.APP_NAME;
+	info.version = req.APP_VERSION;
+	info.uptime = (new Date().getTime() - req.APP_STARTED) / 60000; // minutes
+	res.json(info);
 });
 
 module.exports = router;

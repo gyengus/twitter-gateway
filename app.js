@@ -8,7 +8,6 @@ var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var fs = require('fs');
 var Twitter = require('twitter');
-
 var Logger = require('./lib/logger');
 var sys_logger = new Logger({logdir: __dirname + '/logs/'});
 
@@ -28,7 +27,7 @@ Date.prototype.getFormattedDate = function() {
 
 
 var app = express();
-
+app.APP_STARTED = new Date().getTime();
 app.sys_logger = sys_logger;
 
 // Read configuration from config.json
@@ -47,9 +46,12 @@ app.twitter_client = new Twitter({
 app.APP_VERSION = require('./package.json').version;
 sys_logger.write('Application started, version: ' + app.APP_VERSION, 'system');
 
+// Read clients informations
+app.CLIENTS = require('./clients.json');
+
 // view engine setup
-app.set('views', path.join(__dirname, 'web/views'));
-app.set('view engine', 'jade');
+//app.set('views', path.join(__dirname, 'web/views'));
+//app.set('view engine', 'jade');
 
 //app.use(favicon(__dirname + '/public/favicon.ico'));
 app.set('trust proxy', function(ip) {
@@ -61,15 +63,17 @@ app.use(logger('combined', {stream: accesslogStream}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+//app.use(express.static(path.join(__dirname, 'public')));
 //app.use(__dirname + '/files', express.static('downloads'));
 
 // a middleware with no mount path, gets executed for every request to the router
-app.use(function (req, res, next) {
+app.use(function(req, res, next) {
 	req.APP_VERSION = app.APP_VERSION;
 	req.APP_NAME = app.APP_NAME;
+	req.APP_STARTED = app.APP_STARTED;
 	req.sys_logger = sys_logger;
 	req.twitter_client = app.twitter_client;
+	req.CLIENTS = app.CLIENTS;
 	next();
 });
 
