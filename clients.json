@@ -1,12 +1,12 @@
 [
 	{
-		"name": "first client",
-		"api-key": "",
-		"api-secret": ""
+		"name": "for dev",
+		"api_key": "79cf38b91838759812500df199a3ce31f8f4bf9120ec5f18c6280cc0a4e3d22e",
+		"api_secret": "95ce077d7090382de14d20266930d2a6c734c3d65b8f026fba9f9cf409c8d948"
 	},
 	{
 		"name": "second client",
-		"api-key": "",
-		"api-secret": ""
+		"api_key": "",
+		"api_secret": ""
 	}
 ]

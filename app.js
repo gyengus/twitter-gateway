@@ -95,14 +95,14 @@ if (app.get('env') === 'development') {
 	app.use(function(err, req, res, next) {
 		var logerror = err.message + '\nURL: ' + req.originalUrl + '\nHeaders: ' + JSON.stringify(req.headers) + '\nError: ' + JSON.stringify(err) + '\nStack: ' + err.stack;
 		req.sys_logger.write(logerror, 'error');
-		res.status(err.status || 500);
+		//res.status(err.status || 500);
 		/*res.render('error', {
 			title: req.APP_NAME,
 			app_version: req.APP_VERSION,
 			message: err.message,
 			error: err
 		});*/
-		res.send(res.status);
+		res.sendStatus(err.status || 500);
 	});
 }
 
@@ -210,7 +210,7 @@ function onError(error) {
  * Event listener for HTTP server "listening" event.
  */
 function onListening() {
-	var addr = server.address();
+	/*var addr = server.address();
 	var bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
-	app.sys_logger.write('Debug: Listening on ' + bind, "system");
+	app.sys_logger.write('Debug: Listening on ' + bind, "system");*/
 }
