@@ -82,9 +82,9 @@ app.use('/api', api);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
-  var err = new Error('Not Found');
-  err.status = 404;
-  next(err);
+	var err = new Error('Not Found');
+	err.status = 404;
+	next(err);
 });
 
 // error handlers
@@ -92,36 +92,44 @@ app.use(function(req, res, next) {
 // development error handler
 // will print stacktrace
 if (app.get('env') === 'development') {
-  app.use(function(err, req, res, next) {
+	app.use(function(err, req, res, next) {
 		var logerror = err.message + '\nURL: ' + req.originalUrl + '\nHeaders: ' + JSON.stringify(req.headers) + '\nError: ' + JSON.stringify(err) + '\nStack: ' + err.stack;
 		req.sys_logger.write(logerror, 'error');
 		res.status(err.status || 500);
-		res.render('error', {
+		/*res.render('error', {
 			title: req.APP_NAME,
 			app_version: req.APP_VERSION,
-      message: err.message,
-      error: err
-    });
-  });
+			message: err.message,
+			error: err
+		});*/
+		res.send(res.status);
+	});
 }
 
 // production error handler
 // no stacktraces leaked to user
 app.use(function(err, req, res, next) {
-  res.status(err.status || 500);
 	// mentsük fájlba
 	var logerror = err.message + '\nURL: ' + req.originalUrl + '\nHeaders: ' + JSON.stringify(req.headers) + '\nError: ' + JSON.stringify(err) + '\nStack: ' + err.stack;
 	req.sys_logger.write(logerror, 'error');
-	res.render('error', {
+	/*res.render('error', {
 		title: req.APP_NAME,
 		app_version: req.APP_VERSION,
 		message: err.message,
 		error: {}
-	});
+	});*/
+	res.sendStatus(err.status || 500);
+//	res.send(res.status);
 });
 
-// signal handler
-['SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT',
+// signal handler, SIGHUP-ot külön szedni
+process.on('SIGHUP', function() {
+	// Kliens lista újratöltése
+	app.CLIENTS = require('./clients.json');
+	sys_logger.write('SIGHUP signal received, reloaded clients.json', 'system');
+});
+
+['SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT',
 	'SIGBUS', 'SIGFPE', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGTERM'
 	].forEach(function(element, index, array) {
 		process.on(element, function() {

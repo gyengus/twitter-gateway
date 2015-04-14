@@ -9,10 +9,13 @@ function in_array(needle, haystack) {
     return false;
 } // in_array
 
+// POST data: req.body.variable_name
+
 router.use(function(req, res, next) {
 	req.sys_logger.write('csilla', 'debug');
 	// Jogosultság ellenőrzése, ha ok, akkor next(), különben "access denied" 403
-	//res.redirect('/');
+	// [Authorization] => key=titkos
+	// res.sendStatus(403);
 	next();
 });
 
