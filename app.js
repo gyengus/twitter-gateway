@@ -49,9 +49,11 @@ sys_logger.write('Application started, version: ' + app.APP_VERSION, 'system');
 // Read clients informations
 app.CLIENTS = require('./clients.json');
 
-// view engine setup
-//app.set('views', path.join(__dirname, 'web/views'));
-//app.set('view engine', 'jade');
+if (process.argv[2] === '--development') {
+	app.DEVMODE = true;
+} else {
+	app.DEVMODE = false;
+}
 
 //app.use(favicon(__dirname + '/public/favicon.ico'));
 app.set('trust proxy', function(ip) {
@@ -63,14 +65,13 @@ app.use(logger('combined', {stream: accesslogStream}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
-//app.use(express.static(path.join(__dirname, 'public')));
-//app.use(__dirname + '/files', express.static('downloads'));
 
 // a middleware with no mount path, gets executed for every request to the router
 app.use(function(req, res, next) {
 	req.APP_VERSION = app.APP_VERSION;
 	req.APP_NAME = app.APP_NAME;
 	req.APP_STARTED = app.APP_STARTED;
+	req.DEVMODE = app.DEVMODE;
 	req.sys_logger = sys_logger;
 	req.twitter_client = app.twitter_client;
 	req.CLIENTS = app.CLIENTS;
@@ -89,37 +90,13 @@ app.use(function(req, res, next) {
 
 // error handlers
 
-// development error handler
-// will print stacktrace
-if (app.get('env') === 'development') {
-	app.use(function(err, req, res, next) {
-		var logerror = err.message + '\nURL: ' + req.originalUrl + '\nHeaders: ' + JSON.stringify(req.headers) + '\nError: ' + JSON.stringify(err) + '\nStack: ' + err.stack;
-		req.sys_logger.write(logerror, 'error');
-		//res.status(err.status || 500);
-		/*res.render('error', {
-			title: req.APP_NAME,
-			app_version: req.APP_VERSION,
-			message: err.message,
-			error: err
-		});*/
-		res.sendStatus(err.status || 500);
-	});
-}
-
 // production error handler
 // no stacktraces leaked to user
 app.use(function(err, req, res, next) {
 	// mentsük fájlba
 	var logerror = err.message + '\nURL: ' + req.originalUrl + '\nHeaders: ' + JSON.stringify(req.headers) + '\nError: ' + JSON.stringify(err) + '\nStack: ' + err.stack;
 	req.sys_logger.write(logerror, 'error');
-	/*res.render('error', {
-		title: req.APP_NAME,
-		app_version: req.APP_VERSION,
-		message: err.message,
-		error: {}
-	});*/
 	res.sendStatus(err.status || 500);
-//	res.send(res.status);
 });
 
 // signal handler, SIGHUP-ot külön szedni
@@ -143,7 +120,7 @@ process.on('SIGHUP', function() {
 var ip_address = CONFIG.address || process.env.OPENSHIFT_NODEJS_IP || process.env.NODE_IP || '0.0.0.0';
 
 /**
- * Get port from environment and store in Express.
+ * Get port from config or environment and store in Express.
  */
 var port = normalizePort(CONFIG.port || process.env.PORT || '51635');
 app.set('port', port);
@@ -154,10 +131,11 @@ app.set('port', port);
 var server = http.createServer(app);
 
 /**
- * Listen on provided port, on all network interfaces.
+ * Listen on provided port and network interfaces.
  */
 server.listen(port, ip_address, function() {
 	app.sys_logger.write('Listening: ' + server.address().address + ':' + server.address().port, 'system');
+	if (app.DEVMODE) console.log('Listening: ' + server.address().address + ':' + server.address().port);
 });
 server.on('error', onError);
 server.on('listening', onListening);
