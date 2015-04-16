@@ -35,7 +35,7 @@ router.route('/messages')
 				var msg = [];
 				for (var i = 0; i < messages.length; i++) {
 					var tmp = {};
-					tmp.id = messages[i].id;
+					tmp.id = messages[i].id_str;
 					tmp.created_at = messages[i].created_at;
 					tmp.text = messages[i].text;
 					tmp.sender_screen_name = messages[i].sender_screen_name;
@@ -73,14 +73,20 @@ router.route('/message')
 router.route('/message/:id')
 	.get(function(req, res, next) { // Read a message by id
 		req.twitter_client.get('direct_messages/show', {id: req.params.id}, function(error, message, response) {
-			var tmp = {};
-			tmp.id = message.id;
-			tmp.created_at = message.created_at;
-			tmp.text = message.text;
-			tmp.sender_screen_name = message.sender_screen_name;
-			tmp.sender_id = message.sender.id;
-			tmp.sender_name = message.sender.name;
-			res.json(JSON.stringify(tmp));
+			if (error) {
+				if (req.DEVMODE) console.log(error);
+				req.sys_logger.write('Error on get the message: ' + error[0].code + '; ' + error[0].message + '\nId: ' + req.params.id, 'error');
+				res.sendStatus(500);
+			} else {
+				var tmp = {};
+				tmp.id = message.id_str;
+				tmp.created_at = message.created_at;
+				tmp.text = message.text;
+				tmp.sender_screen_name = message.sender_screen_name;
+				tmp.sender_id = message.sender.id;
+				tmp.sender_name = message.sender.name;
+				res.json(JSON.stringify(tmp));
+			}
 		});
 	})
 	.delete(function(req, res, next) { // Delete a message by id
@@ -109,6 +115,7 @@ router.route('/statuses')
 				for (var i = 0; i < tweets.length; i++) {
 					var tmp = {};
 					tmp.created_at = tweets[i].created_at;
+					tmp.id = tweets[i].id_str;
 					tmp.text = tweets[i].text;
 					//tmp.coordinates = tweets[i].coordinates.coordinates;
 					tmp.user_name = tweets[i].user.name;
@@ -133,10 +140,9 @@ router.route('/status')
 					req.sys_logger.write('Error on send tweet: ' + error[0].code + '; ' + error[0].message + '\nReceipent: ' + to + '\nText: ' + text, 'error');
 					res.sendStatus(500);
 				} else {
-					res.json('{"id": ' + tweet.id + '}');
+					res.json('{"id": ' + tweet.id_str + '}');
 				}
 			});
-
 		} else {
 			res.sendStatus(400);
 		}
