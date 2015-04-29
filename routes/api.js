@@ -43,7 +43,9 @@ router.route('/messages')
 					tmp.sender_name = messages[i].sender.name;
 					msg.push(tmp);
 				} // for
-				res.json(JSON.stringify(msg));
+				var out = {};
+				out.messages = msg;
+				res.json(out);
 			}
 		});
 	});
@@ -85,7 +87,9 @@ router.route('/message/:id')
 				tmp.sender_screen_name = message.sender_screen_name;
 				tmp.sender_id = message.sender.id;
 				tmp.sender_name = message.sender.name;
-				res.json(JSON.stringify(tmp));
+				var out = {};
+				out.message = tmp;
+				res.json(out);
 			}
 		});
 	})
@@ -124,7 +128,9 @@ router.route('/statuses')
 					tmp.user_profile_image_url = tweets[i].user.profile_image_url;
 					msg.push(tmp);
 				} // for
-				res.json(JSON.stringify(msg));
+				var out = {};
+				out.statuses = msg;
+				res.json(out);
 			}
 		});
 	});
