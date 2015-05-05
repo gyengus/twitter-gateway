@@ -112,15 +112,12 @@ server.use(function(req, res, next) {
 		} // while
 		if (authok) {
 			req.sys_logger.write('Authorized access: ' + req.CLIENTS[i].name + '\nClient IP: ' + client_ip + '\nURL: ' + path + '\nHeaders: ' + JSON.stringify(req.headers), 'security');
-			next();
 		} else {
 			req.sys_logger.write('Unauthorized access\nClient IP: ' + client_ip + '\nURL: ' + path + '\nHeaders: ' + JSON.stringify(req.headers), 'security');
 			res.send(403);
-			next();
 		}
-	} else {
-		next();
 	}
+	next();
 });
 
 // routes
