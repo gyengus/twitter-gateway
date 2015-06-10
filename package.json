@@ -14,6 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "bunyan": "^1.3.5",
+    "pmx": "^0.3.16",
     "restify": "^3.0.2",
     "twitter": "^1.2.5"
   }

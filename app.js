@@ -1,15 +1,29 @@
+// Read configuration from config.json
+var CONFIG = require('./config.json');
+
+if (CONFIG.pmx) {
+	var pmx = require('pmx'); // must init pmx before requiring any http module (before requiring express, hapi or other)
+	pmx.init({
+		http: true,
+		errors: true,
+		custom_probes: true,
+		network: true,
+		ports: true
+	});
+}
+
 var restify = require('restify');
 var Bunyan = require('bunyan');
 var fs = require('fs');
 var Twitter = require('twitter');
 var Logger = require('./lib/logger');
-var sys_logger = new Logger({logdir: __dirname + '/logs/'});
+var sys_logger = new Logger({logdir: __dirname + '/' + CONFIG.logdir + '/'});
 var indexPage = require('./routes/index');
 var api = require('./routes/api');
 
 // Date format: yyyy-mm-dd H:i:s
-Date.prototype.getFormattedDate = function() {
-	var time = this;
+global.getFormattedDate = function() {
+	var time = new Date();
 	var month = ((time.getMonth() + 1) > 9 ? '' : '0') + (time.getMonth() + 1);
 	var day = (time.getDate() > 9 ? '' : '0') + time.getDate();
 	var hour = (time.getHours() > 9 ? '' : '0') + time.getHours();
@@ -17,9 +31,6 @@ Date.prototype.getFormattedDate = function() {
 	var second = (time.getSeconds() > 9 ? '' : '0') + time.getSeconds();
 	return time.getFullYear() + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second;
 };
-
-// Read configuration from config.json
-var CONFIG = require('./config.json');
 
 var bunyanlog = new Bunyan({
 	name: CONFIG.name,
@@ -64,11 +75,7 @@ sys_logger.write('Application started, version: ' + server.APP_VERSION, 'system'
 // Read clients informations
 server.CLIENTS = require('./clients.json');
 
-if (process.argv[2] === '--development') {
-	server.DEVMODE = true;
-} else {
-	server.DEVMODE = false;
-}
+server.DEVMODE = (process.argv[2] === '--development');
 
 var ip_address = CONFIG.address || process.env.OPENSHIFT_NODEJS_IP || process.env.NODE_IP || '0.0.0.0';
 var port = CONFIG.port || process.env.PORT || '51635';
@@ -99,20 +106,20 @@ server.use(function(req, res, next) {
 	// Authorization
 	var path = req.path();
 	if (path.indexOf('api') > -1) {
-		var i = 0;
-		var x = req.CLIENTS.length;
 		var client_ip = req.header('x-forwarded-for') || req.connection.remoteAddress;
-		var authok = false;
-		while (i < x) {
-			if (req.headers.authorization == 'key=' + req.CLIENTS[i].api_key) {
-				authok = true;
-				break;
-			}
-			i++;
-		} // while
-		if (authok) {
-			req.sys_logger.write('Authorized access: ' + req.CLIENTS[i].name + '\nClient IP: ' + client_ip + '\nURL: ' + path + '\nHeaders: ' + JSON.stringify(req.headers), 'security');
+		var clientData = checkClientForAuthorize(req);
+
+		if (clientData) {
+			req.sys_logger.write('Authorized access: ' + clientData.name + '\nClient IP: ' + clientData.ip + '\nURL: ' + path + '\nHeaders: ' + JSON.stringify(req.headers), 'security');
 		} else {
+			if (CONFIG.pmx) {
+				// report to Keymetrics.io
+				pmx.emit('Unauthorized access', {
+							clientIP : client_ip,
+							url : path,
+							headers: req.headers
+				});
+			}
 			req.sys_logger.write('Unauthorized access\nClient IP: ' + client_ip + '\nURL: ' + path + '\nHeaders: ' + JSON.stringify(req.headers), 'security');
 			res.send(403);
 		}
@@ -148,3 +155,26 @@ process.on('SIGHUP', function() {
 		});
 	});
 
+function checkClientForAuthorize(req) {
+	var i = 0;
+	var client_ip = req.header('x-forwarded-for') || req.connection.remoteAddress;
+	while (i < req.CLIENTS.length) {
+		if (req.headers.authorization === 'key=' + req.CLIENTS[i].api_key) {
+			var clientData = {};
+			clientData = req.CLIENTS[i];
+			clientData.ip = client_ip;
+			return clientData;
+		}
+		i++;
+	} // while
+	return false;
+}
+
+if (CONFIG.pmx) {
+	server.use(pmx.expressErrorHandler());
+
+	pmx.action('Reload clients', {comment: 'Reload clients data for authorization'}, function(reply) {
+		server.CLIENTS = require('./clients.json');
+		reply({success: true});
+	});
+}
