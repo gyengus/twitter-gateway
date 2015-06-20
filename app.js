@@ -73,7 +73,7 @@ server.APP_VERSION = require('./package.json').version;
 sys_logger.write('Application started, version: ' + server.APP_VERSION, 'system');
 
 // Read clients informations
-server.CLIENTS = require('./clients.json');
+loadClients();
 
 server.DEVMODE = (process.argv[2] === '--development');
 
@@ -138,11 +138,7 @@ server.put('/api/status', api.newStatus);
 server.del('/api/status/:id', api.delStatus);
 
 // signal handler, SIGHUP
-process.on('SIGHUP', function() {
-	// Reload clients list
-	server.CLIENTS = require('./clients.json');
-	sys_logger.write('SIGHUP signal received, reloaded clients.json', 'system');
-});
+process.on('SIGHUP', loadClients);
 
 // other signals
 ['SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT',
@@ -154,6 +150,13 @@ process.on('SIGHUP', function() {
 			});
 		});
 	});
+
+function loadClients() {
+	// Load clients list
+	//server.CLIENTS = require('./clients.json');
+	server.CLIENTS = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
+	sys_logger.write('SIGHUP signal received, reloaded clients.json', 'system');
+}
 
 function checkClientForAuthorize(req) {
 	var i = 0;
@@ -174,7 +177,7 @@ if (CONFIG.pmx) {
 	server.use(pmx.expressErrorHandler());
 
 	pmx.action('Reload clients', {comment: 'Reload clients data for authorization'}, function(reply) {
-		server.CLIENTS = require('./clients.json');
+		loadClients();
 		reply({success: true});
 	});
 }
