@@ -33,3 +33,4 @@ bootstrap_theme.jade
 gulp_package.json
 cache/*.json
 *.zip
+config.json

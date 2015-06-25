@@ -1,22 +1,29 @@
-var http = require('http');
+// Read configuration from config.json
+var CONFIG = require('./lib/configLoader').load();
 
-var express = require('express');
-var path = require('path');
-var favicon = require('serve-favicon');
-var logger = require('morgan');
-var cookieParser = require('cookie-parser');
-var bodyParser = require('body-parser');
+if (CONFIG.pmx) {
+	var pmx = require('pmx'); // must init pmx before requiring any http module (before requiring express, hapi or other)
+	pmx.init({
+		http: true,
+		errors: true,
+		custom_probes: true,
+		network: true,
+		ports: true
+	});
+}
+
+var restify = require('restify');
+var Bunyan = require('bunyan');
 var fs = require('fs');
 var Twitter = require('twitter');
 var Logger = require('./lib/logger');
-var sys_logger = new Logger({logdir: __dirname + '/logs/'});
-
-var routes = require('./routes/index');
+var sys_logger = new Logger({logdir: __dirname + '/' + CONFIG.logdir + '/'});
+var indexPage = require('./routes/index');
 var api = require('./routes/api');
 
 // Date format: yyyy-mm-dd H:i:s
-Date.prototype.getFormattedDate = function() {
-	var time = this;
+global.getFormattedDate = function() {
+	var time = new Date();
 	var month = ((time.getMonth() + 1) > 9 ? '' : '0') + (time.getMonth() + 1);
 	var day = (time.getDate() > 9 ? '' : '0') + time.getDate();
 	var hour = (time.getHours() > 9 ? '' : '0') + time.getHours();
@@ -25,17 +32,36 @@ Date.prototype.getFormattedDate = function() {
 	return time.getFullYear() + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second;
 };
 
+var bunyanlog = new Bunyan({
+	name: CONFIG.name,
+	streams: [
+		{
+			path: CONFIG.logdir + '/access.log',
+			level: 'trace'
+		}
+	],
+	serializers: {
+		req: Bunyan.stdSerializers.req,
+		res: restify.bunyan.serializers.res
+	}
+});
 
-var app = express();
-app.APP_STARTED = new Date().getTime();
-app.sys_logger = sys_logger;
+var server = restify.createServer({
+	name: CONFIG.name,
+	log: bunyanlog
+});
+server.use(restify.acceptParser(server.acceptable));
+server.use(restify.queryParser());
+server.use(restify.bodyParser());
+server.use(restify.gzipResponse());
 
-// Read configuration from config.json
-var CONFIG = require('./config.json');
-app.APP_NAME = CONFIG.name;
-app.LOGDIR = CONFIG.logdir;
+server.APP_STARTED = new Date().getTime();
+server.sys_logger = sys_logger;
 
-app.twitter_client = new Twitter({
+server.APP_NAME = CONFIG.name;
+server.LOGDIR = CONFIG.logdir;
+
+server.twitter_client = new Twitter({
 	consumer_key: CONFIG.consumer_key,
 	consumer_secret: CONFIG.consumer_secret,
 	access_token_key: CONFIG.access_token_key,
@@ -43,67 +69,81 @@ app.twitter_client = new Twitter({
 });
 
 // Read version from package.json
-app.APP_VERSION = require('./package.json').version;
-sys_logger.write('Application started, version: ' + app.APP_VERSION, 'system');
+server.APP_VERSION = require('./package.json').version;
+sys_logger.write('Application started, version: ' + server.APP_VERSION, 'system');
 
 // Read clients informations
-app.CLIENTS = require('./clients.json');
+loadClients();
 
-if (process.argv[2] === '--development') {
-	app.DEVMODE = true;
-} else {
-	app.DEVMODE = false;
-}
+server.DEVMODE = (process.argv[2] === '--development');
 
-//app.use(favicon(__dirname + '/public/favicon.ico'));
-app.set('trust proxy', function(ip) {
-	if (ip === '127.0.0.1') return true;
-	return false;
+var ip_address = CONFIG.address || process.env.OPENSHIFT_NODEJS_IP || process.env.NODE_IP || '0.0.0.0';
+var port = CONFIG.port || process.env.PORT || '51635';
+server.listen(port, ip_address, function () {
+	server.sys_logger.write('Listening: ' + ip_address + ':' + port, 'system');
+	if (server.DEVMODE) console.log('Listening: ' + ip_address + ':' + port);
 });
-var accesslogStream = fs.createWriteStream(__dirname + '/' + app.LOGDIR + '/access.log', {flags: 'a'});
-app.use(logger('combined', {stream: accesslogStream}));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(cookieParser());
 
-// a middleware with no mount path, gets executed for every request to the router
-app.use(function(req, res, next) {
-	req.APP_VERSION = app.APP_VERSION;
-	req.APP_NAME = app.APP_NAME;
-	req.APP_STARTED = app.APP_STARTED;
-	req.DEVMODE = app.DEVMODE;
+server.pre(function(req, res, next) {
+	req.log.info({req: req}, 'start');
+	return next();
+});
+
+server.on('after', function(req, res, route) {
+	req.log.info({res: res}, 'finished');
+});
+
+server.use(function(req, res, next) {
+	sys_logger.write(req, 'debug');
+	req.APP_VERSION = server.APP_VERSION;
+	req.APP_NAME = server.APP_NAME;
+	req.APP_STARTED = server.APP_STARTED;
+	req.DEVMODE = server.DEVMODE;
 	req.sys_logger = sys_logger;
-	req.twitter_client = app.twitter_client;
-	req.CLIENTS = app.CLIENTS;
+	req.twitter_client = server.twitter_client;
+	req.CLIENTS = server.CLIENTS;
+	if (CONFIG.pmx) {
+		req.pmx = pmx;
+	}
+
+	// Authorization
+	var path = req.path();
+	if (path.indexOf('api') > -1) {
+		var client_ip = req.header('x-forwarded-for') || req.connection.remoteAddress;
+		var clientData = checkClientForAuthorize(req);
+
+		if (clientData) {
+			req.sys_logger.write('Authorized access: ' + clientData.name + '\nClient IP: ' + clientData.ip + '\nURL: ' + path + '\nHeaders: ' + JSON.stringify(req.headers), 'security');
+		} else {
+			if (CONFIG.pmx) {
+				// report to Keymetrics.io
+				pmx.emit('Unauthorized access', {
+							clientIP : client_ip,
+							url : path,
+							headers: req.headers
+				});
+			}
+			req.sys_logger.write('Unauthorized access\nClient IP: ' + client_ip + '\nURL: ' + path + '\nHeaders: ' + JSON.stringify(req.headers), 'security');
+			res.send(403);
+		}
+	}
 	next();
 });
 
-app.use('/', routes);
-app.use('/api', api);
+// routes
+server.get('/', indexPage);
+server.get('/api/messages', api.getMessages);
+server.put('/api/message', api.newMessage);
+server.get('/api/message/:id', api.getMessage);
+server.del('/api/message/:id', api.delMessage);
+server.get('/api/statuses', api.getStatuses);
+server.put('/api/status', api.newStatus);
+server.del('/api/status/:id', api.delStatus);
 
-// catch 404 and forward to error handler
-app.use(function(req, res, next) {
-	var err = new Error('Not Found');
-	err.status = 404;
-	next(err);
-});
+// signal handler, SIGHUP
+process.on('SIGHUP', loadClients);
 
-// production error handler
-// no stacktraces leaked to user
-app.use(function(err, req, res, next) {
-	// mentsük fájlba
-	var logerror = err.message + '\nURL: ' + req.originalUrl + '\nHeaders: ' + JSON.stringify(req.headers) + '\nError: ' + JSON.stringify(err) + '\nStack: ' + err.stack;
-	req.sys_logger.write(logerror, 'error');
-	res.sendStatus(err.status || 500);
-});
-
-// signal handler, SIGHUP-ot külön szedni
-process.on('SIGHUP', function() {
-	// Kliens lista újratöltése
-	app.CLIENTS = require('./clients.json');
-	sys_logger.write('SIGHUP signal received, reloaded clients.json', 'system');
-});
-
+// other signals
 ['SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT',
 	'SIGBUS', 'SIGFPE', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGTERM'
 	].forEach(function(element, index, array) {
@@ -114,79 +154,33 @@ process.on('SIGHUP', function() {
 		});
 	});
 
-// Listening IP address
-var ip_address = CONFIG.address || process.env.OPENSHIFT_NODEJS_IP || process.env.NODE_IP || '0.0.0.0';
+function loadClients() {
+	// Load clients list
+	//server.CLIENTS = require('./clients.json');
+	server.CLIENTS = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
+	sys_logger.write('Reloaded clients.json', 'system');
+}
 
-/**
- * Get port from config or environment and store in Express.
- */
-var port = normalizePort(CONFIG.port || process.env.PORT || '51635');
-app.set('port', port);
-
-/**
- * Create HTTP server.
- */
-var server = http.createServer(app);
-
-/**
- * Listen on provided port and network interfaces.
- */
-server.listen(port, ip_address, function() {
-	app.sys_logger.write('Listening: ' + server.address().address + ':' + server.address().port, 'system');
-	if (app.DEVMODE) console.log('Listening: ' + server.address().address + ':' + server.address().port);
-});
-server.on('error', onError);
-server.on('listening', onListening);
-
-/**
- * Normalize a port into a number, string, or false.
- */
-function normalizePort(val) {
-	var port = parseInt(val, 10);
-
-	if (isNaN(port)) {
-		// named pipe
-		return val;
-	}
-
-	if (port >= 0) {
-		// port number
-		return port;
-  	}
-
+function checkClientForAuthorize(req) {
+	var i = 0;
+	var client_ip = req.header('x-forwarded-for') || req.connection.remoteAddress;
+	while (i < req.CLIENTS.length) {
+		if (req.headers.authorization === 'key=' + req.CLIENTS[i].api_key) {
+			var clientData = {};
+			clientData = req.CLIENTS[i];
+			clientData.ip = client_ip;
+			return clientData;
+		}
+		i++;
+	} // while
 	return false;
 }
 
-/**
- * Event listener for HTTP server "error" event.
- */
-function onError(error) {
-	if (error.syscall !== 'listen') {
-		throw error;
-	}
+if (CONFIG.pmx) {
+	server.use(pmx.expressErrorHandler());
 
-	var bind = typeof port === 'string' ? 'Pipe ' + port : 'Port ' + port;
-
-	// handle specific listen errors with friendly messages
-	switch (error.code) {
-		case 'EACCES':
-			console.error(bind + ' requires elevated privileges');
-			process.exit(1);
-			break;
-		case 'EADDRINUSE':
-			console.error(bind + ' is already in use');
-			process.exit(1);
-			break;
-		default:
-			throw error;
-	}
-}
-
-/**
- * Event listener for HTTP server "listening" event.
- */
-function onListening() {
-	/*var addr = server.address();
-	var bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
-	app.sys_logger.write('Debug: Listening on ' + bind, "system");*/
+	pmx.action('Reload clients', {comment: 'Reload clients data for authorization'}, function(reply) {
+		loadClients();
+		reply({success: true});
+	});
 }
