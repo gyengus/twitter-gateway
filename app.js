@@ -1,5 +1,5 @@
 // Read configuration from config.json
-var CONFIG = require('./config.json');
+var CONFIG = require('./lib/configLoader').load();
 
 if (CONFIG.pmx) {
 	var pmx = require('pmx'); // must init pmx before requiring any http module (before requiring express, hapi or other)
@@ -102,6 +102,9 @@ server.use(function(req, res, next) {
 	req.sys_logger = sys_logger;
 	req.twitter_client = server.twitter_client;
 	req.CLIENTS = server.CLIENTS;
+	if (CONFIG.pmx) {
+		req.pmx = pmx;
+	}
 
 	// Authorization
 	var path = req.path();
@@ -155,7 +158,7 @@ function loadClients() {
 	// Load clients list
 	//server.CLIENTS = require('./clients.json');
 	server.CLIENTS = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
-	sys_logger.write('SIGHUP signal received, reloaded clients.json', 'system');
+	sys_logger.write('Reloaded clients.json', 'system');
 }
 
 function checkClientForAuthorize(req) {
