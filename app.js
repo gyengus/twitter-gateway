@@ -10,6 +10,15 @@ if (CONFIG.pmx) {
 		network: true,
 		ports: true
 	});
+
+	// Probes
+	var probe = pmx.probe();
+	var messageCounter = probe.counter({
+		name: 'Messages'
+	});
+	var tweetCounter = probe.counter({
+		name: 'Tweets'
+	});
 }
 
 var restify = require('restify');
@@ -104,6 +113,8 @@ server.use(function(req, res, next) {
 	req.CLIENTS = server.CLIENTS;
 	if (CONFIG.pmx) {
 		req.pmx = pmx;
+		req.messageCounter = messageCounter;
+		req.tweetCounter = tweetCounter;
 	}
 
 	// Authorization

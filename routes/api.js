@@ -39,6 +39,9 @@ api.newMessage = function(req, res, next) {
 				req.sys_logger.write('Error on send message: ' + error[0].code + '; ' + error[0].message + '\nReceipent: ' + to + '\nText: ' + text, 'error');
 				res.sendStatus(500);
 			} else {
+				if (req.pmx) {
+					req.messageCounter.inc();
+				}
 				res.json('{"id": ' + message.id + '}');
 			}
 		});
@@ -119,6 +122,9 @@ api.newStatus = function(req, res, next) {
 				req.sys_logger.write('Error on send tweet: ' + error[0].code + '; ' + error[0].message + '\nReceipent: ' + to + '\nText: ' + text, 'error');
 				res.sendStatus(500);
 			} else {
+				if (req.pmx) {
+					req.tweetCounter.inc();
+				}
 				res.json('{"id": ' + tweet.id_str + '}');
 			}
 		});
