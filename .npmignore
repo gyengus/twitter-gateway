@@ -35,3 +35,5 @@ bootstrap_theme.jade
 *.php
 gulp_package.json
 cache/*.json
+config.json
+clients.json
