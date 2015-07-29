@@ -1,12 +1,7 @@
 [
 	{
 		"name": "client name",
-		"api_key": "",
-		"api_secret": ""
-	},
-	{
-		"name": "other client",
-		"api_key": "",
-		"api_secret": ""
+		"api_key": "api key",
+		"api_secret": "api secret"
 	}
 ]
