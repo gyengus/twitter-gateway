@@ -34,3 +34,4 @@ gulp_package.json
 cache/*.json
 *.zip
 config.json
+clients.json

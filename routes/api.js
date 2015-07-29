@@ -30,10 +30,10 @@ api.getMessages = function(req, res, next) {
 // Send new message
 // POST data: req.body.variable_name
 api.newMessage = function(req, res, next) {
-	var text = req.body.text;
-	var to = req.body.to;
+	var text = req.context.text;
+	var to = req.context.to;
 	if (text && to) {
-		req.twitter_client.post('direct_messages/new', {screen_name: to, text: text}, function(error, message, response) {
+		req.twitter_client.post('direct_messages/new', {screen_name: to, text: text}, function sendMessage(error, message, response) {
 			if (error) {
 				if (req.DEVMODE) console.log(error);
 				req.sys_logger.write('Error on send message: ' + error[0].code + '; ' + error[0].message + '\nReceipent: ' + to + '\nText: ' + text, 'error');

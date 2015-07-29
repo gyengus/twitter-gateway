@@ -61,7 +61,7 @@ var server = restify.createServer({
 });
 server.use(restify.acceptParser(server.acceptable));
 server.use(restify.queryParser());
-server.use(restify.bodyParser());
+server.use(restify.bodyParser({mapParams: true}));
 server.use(restify.gzipResponse());
 
 server.APP_STARTED = new Date().getTime();
@@ -104,6 +104,7 @@ server.on('after', function(req, res, route) {
 
 server.use(function(req, res, next) {
 	sys_logger.write(req, 'debug');
+	sys_logger.write(req.body, 'debug');
 	req.APP_VERSION = server.APP_VERSION;
 	req.APP_NAME = server.APP_NAME;
 	req.APP_STARTED = server.APP_STARTED;
